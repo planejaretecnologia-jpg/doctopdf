@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocToPDF — Conversor Word para PDF</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #e8ff47;
+    --accent2: #47d9ff;
+    --text: #f0f0f5;
+    --muted: #72728a;
+    --success: #4ade80;
+    --error: #f87171;
+    --warning: #fbbf24;
+  }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.5;
+  }
+
+  .container {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  header {
+    margin-bottom: 48px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 8px;
+  }
+
+  .logo-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(28px, 5vw, 42px);
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: var(--text);
+  }
+
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    margin-left: 54px;
+  }
+
+  /* Drop Zone */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 56px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+
+  .drop-zone::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(232,255,71,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--surface2);
+  }
+
+  .drop-zone.drag-over {
+    transform: scale(1.01);
+  }
+
+  .drop-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    display: block;
+    filter: grayscale(0.3);
+  }
+
+  .drop-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .drop-sub {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .drop-sub strong { color: var(--accent); }
+
+  .browse-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #0e0e10;
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+  }
+
+  .browse-btn:hover { background: #d4f03e; transform: translateY(-1px); }
+
+  #fileInput { display: none; }
+
+  /* File list */
+  .file-list-section {
+    margin-top: 32px;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+
+  .clear-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .clear-btn:hover { border-color: var(--error); color: var(--error); }
+
+  .file-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .file-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Syne', sans-serif;
+  }
+
+  .file-row {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    animation: rowIn 0.3s ease both;
+  }
+
+  .file-row:hover { background: var(--surface2); }
+
+  .file-row td {
+    padding: 14px;
+    vertical-align: middle;
+  }
+
+  .file-name {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    max-width: 300px;
+  }
+
+  .file-name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-icon { font-size: 18px; flex-shrink: 0; }
+
+  .file-size { color: var(--muted); font-size: 12px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-waiting { background: rgba(114,114,138,0.15); color: var(--muted); }
+  .badge-converting { background: rgba(71,217,255,0.12); color: var(--accent2); }
+  .badge-done { background: rgba(74,222,128,0.12); color: var(--success); }
+  .badge-error { background: rgba(248,113,113,0.12); color: var(--error); }
+
+  .spinner {
+    width: 10px; height: 10px;
+    border: 2px solid rgba(71,217,255,0.3);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block;
+  }
+
+  .dl-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: 1px solid rgba(232,255,71,0.3);
+    border-radius: 6px;
+    transition: all 0.2s;
+  }
+
+  .dl-link:hover { background: rgba(232,255,71,0.08); border-color: var(--accent); }
+
+  .remove-btn {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .remove-btn:hover { color: var(--error); background: rgba(248,113,113,0.1); }
+
+  /* Actions */
+  .actions {
+    margin-top: 28px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+
+  .btn-primary {
+    flex: 1;
+    min-width: 200px;
+    padding: 16px 32px;
+    background: var(--accent);
+    color: #0e0e10;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    letter-spacing: 0.2px;
+  }
+
+  .btn-primary:hover:not(:disabled) { background: #d4f03e; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(232,255,71,0.2); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-secondary {
+    padding: 16px 24px;
+    background: var(--surface);
+    color: var(--accent2);
+    border: 1px solid rgba(71,217,255,0.3);
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .btn-secondary:hover:not(:disabled) { background: rgba(71,217,255,0.06); border-color: var(--accent2); transform: translateY(-2px); }
+  .btn-secondary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  /* Progress bar */
+  .progress-wrap {
+    margin-top: 20px;
+    display: none;
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .progress-bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 4px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .empty-state .empty-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+
+  /* Error toast */
+  .error-msg {
+    font-size: 11px;
+    color: var(--error);
+    margin-top: 4px;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .converting-anim {
+    background: linear-gradient(90deg, var(--surface) 0%, var(--surface2) 50%, var(--surface) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo-row">
+      <div class="logo-icon">📄</div>
+      <h1>Doc<span>To</span>PDF</h1>
+    </div>
+    <p class="subtitle">Converta seus documentos Word em PDF com facilidade</p>
+  </header>
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">🗂️</span>
+    <p class="drop-title">Arraste seus arquivos .docx aqui</p>
+    <p class="drop-sub">
+      Suporte para múltiplos arquivos · Máx <strong>20MB</strong> por arquivo · Até <strong>20 arquivos</strong>
+    </p>
+    <button class="browse-btn" onclick="document.getElementById('fileInput').click()">
+      Selecionar Arquivos
+    </button>
+    <input type="file" id="fileInput" accept=".docx,.doc" multiple>
+  </div>
+
+  <!-- File List -->
+  <div class="file-list-section" id="fileListSection" style="display:none">
+    <div class="section-header">
+      <span class="section-title">Arquivos — <span id="fileCount">0</span></span>
+      <button class="clear-btn" onclick="clearAll()">✕ Limpar tudo</button>
+    </div>
+
+    <table class="file-table">
+      <thead>
+        <tr>
+          <th>Arquivo</th>
+          <th>Tamanho</th>
+          <th>Status</th>
+          <th>Download</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="fileTableBody"></tbody>
+    </table>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-label">
+      <span id="progressText">Convertendo...</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn-primary" id="convertBtn" onclick="convertAll()" disabled>
+      ⚡ Converter Todos
+    </button>
+    <button class="btn-secondary" id="zipBtn" onclick="downloadZip()" disabled>
+      📦 Baixar ZIP
+    </button>
+  </div>
+</div>
+
+<script>
+let files = []; // {id, file, name, size, status, pdfUrl, error}
+let jobId = null;
+let pollInterval = null;
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+// Drag & Drop
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  addFiles([...e.dataTransfer.files]);
+});
+
+fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
+
+function addFiles(newFiles) {
+  const valid = newFiles.filter(f => {
+    if (!f.name.match(/\.(docx|doc)$/i)) { alert(`"${f.name}" não é um arquivo Word (.docx)`); return false; }
+    if (f.size > 20 * 1024 * 1024) { alert(`"${f.name}" excede 20MB`); return false; }
+    return true;
+  });
+
+  if (files.length + valid.length > 20) {
+    alert('Máximo de 20 arquivos por lote.');
+    return;
+  }
+
+  valid.forEach(f => {
+    files.push({ id: Date.now() + Math.random(), file: f, name: f.name, size: f.size, status: 'waiting', pdfUrl: null, error: null });
+  });
+
+  renderTable();
+  updateUI();
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function statusBadge(f) {
+  if (f.status === 'waiting') return `<span class="badge badge-waiting">⏳ Aguardando</span>`;
+  if (f.status === 'converting') return `<span class="badge badge-converting"><span class="spinner"></span> Convertendo</span>`;
+  if (f.status === 'done') return `<span class="badge badge-done">✓ Concluído</span>`;
+  if (f.status === 'error') return `<span class="badge badge-error">✗ Erro</span>${f.error ? `<div class="error-msg">${f.error}</div>` : ''}`;
+  return '';
+}
+
+function renderTable() {
+  const body = document.getElementById('fileTableBody');
+  if (files.length === 0) {
+    body.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">📂</div>Nenhum arquivo adicionado</div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = files.map(f => `
+    <tr class="file-row" id="row-${f.id}">
+      <td>
+        <div class="file-name">
+          <span class="file-icon">📝</span>
+          <span title="${f.name}">${f.name}</span>
+        </div>
+      </td>
+      <td><span class="file-size">${formatSize(f.size)}</span></td>
+      <td>${statusBadge(f)}</td>
+      <td>${f.pdfUrl ? `<a class="dl-link" href="${f.pdfUrl}" download="⬇ PDF">⬇ PDF</a>` : '—'}</td>
+      <td>${f.status === 'waiting' ? `<button class="remove-btn" onclick="removeFile('${f.id}')">✕</button>` : ''}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('fileCount').textContent = files.length;
+  document.getElementById('fileListSection').style.display = 'block';
+}
+
+function removeFile(id) {
+  files = files.filter(f => f.id != id);
+  renderTable();
+  updateUI();
+  if (files.length === 0) document.getElementById('fileListSection').style.display = 'none';
+}
+
+function clearAll() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  files = [];
+  jobId = null;
+  renderTable();
+  updateUI();
+  document.getElementById('fileListSection').style.display = 'none';
+  document.getElementById('progressWrap').style.display = 'none';
+}
+
+function updateUI() {
+  const hasWaiting = files.some(f => f.status === 'waiting');
+  const hasDone = files.some(f => f.status === 'done');
+  const converting = files.some(f => f.status === 'converting');
+
+  document.getElementById('convertBtn').disabled = !hasWaiting || converting;
+  document.getElementById('zipBtn').disabled = !hasDone;
+}
+
+async function convertAll() {
+  const waitingFiles = files.filter(f => f.status === 'waiting');
+  if (!waitingFiles.length) return;
+
+  document.getElementById('convertBtn').disabled = true;
+  document.getElementById('progressWrap').style.display = 'block';
+
+  const formData = new FormData();
+  waitingFiles.forEach(f => formData.append('files', f.file));
+
+  // Mark converting
+  waitingFiles.forEach(f => f.status = 'converting');
+  renderTable();
+
+  try {
+    const resp = await fetch('/convert', { method: 'POST', body: formData });
+    const data = await resp.json();
+
+    if (!resp.ok) throw new Error(data.error || 'Erro ao enviar arquivos');
+
+    jobId = data.job_id;
+    pollProgress(waitingFiles, data.file_map);
+  } catch (err) {
+    waitingFiles.forEach(f => { f.status = 'error'; f.error = err.message; });
+    renderTable();
+    updateUI();
+    document.getElementById('progressWrap').style.display = 'none';
+  }
+}
+
+function pollProgress(waitingFiles, fileMap) {
+  // fileMap: {original_name: server_name}
+  let attempts = 0;
+  pollInterval = setInterval(async () => {
+    attempts++;
+    if (attempts > 120) { clearInterval(pollInterval); return; }
+
+    try {
+      const resp = await fetch(`/status/${jobId}`);
+      const data = await resp.json();
+
+      let done = 0, total = Object.keys(data.files).length;
+
+      // Update each file's status
+      for (const [serverName, info] of Object.entries(data.files)) {
+        // Find matching file
+        const origName = Object.entries(fileMap).find(([k, v]) => v === serverName)?.[0];
+        if (!origName) continue;
+        const f = waitingFiles.find(f => f.name === origName);
+        if (!f) continue;
+
+        if (info.status === 'done') {
+          f.status = 'done';
+          f.pdfUrl = `/download/${jobId}/${serverName}`;
+          done++;
+        } else if (info.status === 'error') {
+          f.status = 'error';
+          f.error = info.error || 'Falha na conversão';
+          done++;
+        }
+      }
+
+      // Update progress
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressPct').textContent = pct + '%';
+      document.getElementById('progressText').textContent = `${done} de ${total} convertido${total !== 1 ? 's' : ''}`;
+
+      renderTable();
+      updateUI();
+
+      if (done === total) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    } catch (e) { /* retry */ }
+  }, 800);
+}
+
+async function downloadZip() {
+  if (!jobId) return;
+  window.location.href = `/zip/${jobId}`;
+}
+</script>
+</body>
+</html>
